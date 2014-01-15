@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from django.forms.util import ErrorDict
+from django.forms.widgets import MultiWidget
 from djangular.forms.angular_base import NgFormBaseMixin
 
 
@@ -27,11 +28,18 @@ class NgModelFormMixin(NgFormBaseMixin):
             if key.startswith('ng_'):
                 fmtstr = kwargs.pop(key)
                 directives[key.replace('_', '-')] = fmtstr
-        if ng_models is None and 'ng-model' not in directives:
-            directives['ng-model'] = '%(model)s'
+        
         self.prefix = kwargs.get('prefix')
         if self.prefix and kwargs.get('data'):
             kwargs['data'] = dict((self.add_prefix(name), value) for name, value in kwargs['data'].get(self.prefix).items())
+        
+        def asingNgModel(name, field):
+            if isinstance(field.widget, MultiWidget):
+                for i, widget in enumerate(field.widget.widgets):
+                    widget.attrs['ng-model'] = name+'_%s' % i
+            else:
+                field.widget.attrs['ng-model'] = name
+        
         for name, field in self.base_fields.items():
             identifier = self.add_prefix(name)
             ng = {
@@ -40,7 +48,12 @@ class NgModelFormMixin(NgFormBaseMixin):
                 'model': self.scope_prefix and ('%s.%s' % (self.scope_prefix, identifier)) or identifier
             }
             if ng_models and name in ng_models:
-                field.widget.attrs['ng-model'] = ng['model']
+                asingNgModel(ng['model'], field)
+            elif 'ng-model' in directives:
+                asingNgModel(directives.pop('ng-model'), field)
+            else:
+                asingNgModel('%(model)s'%ng, field)
+            
             for key, fmtstr in directives.items():
                 field.widget.attrs[key] = fmtstr % ng
         super(NgModelFormMixin, self).__init__(*args, **kwargs)
